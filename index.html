@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
+  <title>¡Atrapa a Alex!</title>
+  <!-- PWA: instalación como app -->
+  <link rel="manifest" href="manifest.json"/>
+  <link rel="apple-touch-icon" href="icon-192.png"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <meta name="apple-mobile-web-app-title" content="Atrapa Alex"/>
+  <meta name="theme-color" content="#0a1628"/>
+  <link href="https://fonts.googleapis.com/css2?family=Boogaloo&family=Quicksand:wght@700;800&display=swap" rel="stylesheet"/>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    * { cursor: inherit; }
+
+    :root {
+      --accent:  #00d4ff;
+      --gold:    #ffe94d;
+      --white:   #e8f4ff;
+      --hole-dark: #061020;
+      --hole-rim:  #1a4a8a;
+
+      /* Tamaños base escalados con el viewport más pequeño (vmin) */
+      --fs-title:  clamp(1.3rem, 5vmin, 2.8rem);
+      --fs-nivel:  clamp(0.75rem, 2.2vmin, 1.1rem);
+      --fs-nivel-sub: clamp(0.5rem, 1.4vmin, 0.7rem);
+      --fs-hud:    clamp(1.1rem, 4vmin, 2.2rem);
+      --fs-label:  clamp(0.5rem, 1.5vmin, 0.72rem);
+      --fs-btn:    clamp(1rem, 3.5vmin, 1.8rem);
+      --pad-nivel: clamp(4px, 1.2vmin, 10px) clamp(10px, 2.5vmin, 22px);
+      --pad-hud:   clamp(4px, 1.2vmin, 12px) clamp(8px, 2vmin, 18px);
+      --pad-btn:   clamp(8px, 2vmin, 16px) clamp(30px, 7vmin, 64px);
+      --gap-board: clamp(5px, 1.5vmin, 14px);
+      /* Cada círculo = 22% del viewport más pequeño → caben 2 filas cómodamente */
+      --circle-size: min(22vmin, 150px);
+    }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+    }
+
+    body {
+      font-family: 'Quicksand', sans-serif;
+      background:
+        radial-gradient(ellipse at 20% 0%,   #1a4080 0%, transparent 55%),
+        radial-gradient(ellipse at 80% 10%,  #005fa3 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 100%, #0d3a72 0%, transparent 60%),
+        linear-gradient(175deg, #0a1628 0%, #0d2b5e 50%, #0f4a8f 100%);
+      display: flex; flex-direction: column; align-items: center;
+      user-select: none; -webkit-tap-highlight-color: transparent;
+      /* Cursor martillo */
+      cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Ctext y='32' font-size='32'%3E%F0%9F%94%A8%3C/text%3E%3C/svg%3E") 4 4, auto !important;
+    }
+    body.golpeando,
+    body.golpeando * {
+      cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='40' viewBox='0 0 40 40'%3E%3Ctext y='32' font-size='32' transform='rotate(-40 20 20)'%3E%F0%9F%94%A8%3C/text%3E%3C/svg%3E") 4 4, auto !important;
+    }
+
+    /* Estrellas de fondo */
+    body::before {
+      content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background-image:
+        radial-gradient(1px 1px at 10% 15%, rgba(0,212,255,.6) 0%, transparent 100%),
+        radial-gradient(1px 1px at 25% 40%, rgba(255,255,255,.4) 0%, transparent 100%),
+        radial-gradient(1.5px 1.5px at 50% 8%, rgba(0,212,255,.8) 0%, transparent 100%),
+        radial-gradient(1px 1px at 70% 25%, rgba(255,255,255,.5) 0%, transparent 100%),
+        radial-gradient(1px 1px at 85% 12%, rgba(0,212,255,.6) 0%, transparent 100%),
+        radial-gradient(1.5px 1.5px at 35% 70%, rgba(56,182,255,.4) 0%, transparent 100%),
+        radial-gradient(1px 1px at 90% 55%, rgba(0,212,255,.5) 0%, transparent 100%),
+        radial-gradient(1px 1px at 15% 80%, rgba(255,255,255,.3) 0%, transparent 100%);
+      animation: twinkle 4s ease-in-out infinite alternate;
+    }
+    @keyframes twinkle { 0% { opacity:.6 } 100% { opacity:1 } }
+
+    /* ── CONTROL DE VOLUMEN ── */
+    #vol-control {
+      position: fixed; top: 10px; right: 12px; z-index: 300;
+      display: flex; align-items: center; gap: 5px;
+      background: rgba(0,40,100,0.65);
+      border: 2px solid rgba(0,212,255,0.35); border-radius: 30px;
+      padding: 5px 10px; backdrop-filter: blur(8px);
+      box-shadow: 0 0 12px rgba(0,212,255,0.15);
+    }
+    #vol-icon { font-size: clamp(0.85rem, 2.5vmin, 1.1rem); min-width: 18px; text-align: center; }
+    #vol-slider {
+      -webkit-appearance: none; appearance: none;
+      width: clamp(50px, 10vmin, 80px); height: 4px;
+      border-radius: 2px; outline: none; border: none;
+      background: linear-gradient(to right, #00d4ff 0%, #00d4ff var(--val,70%), rgba(255,255,255,.2) var(--val,70%));
+    }
+    #vol-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 13px; height: 13px; border-radius: 50%;
+      background: #00d4ff; box-shadow: 0 0 5px rgba(0,212,255,.7);
+    }
+    #vol-slider::-moz-range-thumb {
+      width: 13px; height: 13px; border-radius: 50%; border: none;
+      background: #00d4ff;
+    }
+
+    /* ── WRAPPER PRINCIPAL ── */
+    .game-wrapper {
+      position: relative; z-index: 1;
+      width: 100%; height: 100dvh;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: space-evenly;
+      padding: clamp(6px, 2vmin, 20px) clamp(8px, 3vmin, 24px);
+    }
+
+    /* ── TÍTULO ── */
+    header { text-align: center; width: 100%; }
+    h1 {
+      font-family: 'Boogaloo', cursive;
+      font-size: var(--fs-title);
+      line-height: 1; letter-spacing: 1px;
+      background: linear-gradient(135deg, #fff 20%, var(--accent) 60%, var(--gold) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      filter: drop-shadow(0 0 14px rgba(0,212,255,.6));
+    }
+    h1 .emoji { -webkit-text-fill-color: initial; filter: none; }
+
+    /* ── SELECTOR DE NIVEL ── */
+    .nivel-selector {
+      display: flex; justify-content: center;
+      gap: clamp(6px, 2vmin, 12px); width: 100%;
+    }
+    .btn-nivel {
+      font-family: 'Boogaloo', cursive;
+      font-size: var(--fs-nivel); padding: var(--pad-nivel);
+      border-radius: 50px;
+      border: 2px solid rgba(0,212,255,.3);
+      background: rgba(0,60,130,.4); color: rgba(255,255,255,.55);
+      transition: all .18s; backdrop-filter: blur(6px);
+      flex: 1; max-width: clamp(90px, 22vmin, 150px);
+      line-height: 1.2; text-align: center;
+    }
+    .btn-nivel small {
+      display: block; font-family: 'Quicksand', sans-serif;
+      font-size: var(--fs-nivel-sub); font-weight: 800;
+      letter-spacing: 1px; opacity: .75;
+    }
+    .btn-nivel[data-nivel="1"].activo { background: linear-gradient(135deg,#00b894,#00cec9); border-color:#00cec9; color:#fff; box-shadow:0 0 14px rgba(0,206,201,.5),0 4px 0 #007a6e; }
+    .btn-nivel[data-nivel="2"].activo { background: linear-gradient(135deg,#0099ff,#00d4ff); border-color:#00d4ff; color:#fff; box-shadow:0 0 14px rgba(0,212,255,.5),0 4px 0 #005a99; }
+    .btn-nivel[data-nivel="3"].activo { background: linear-gradient(135deg,#e17055,#d63031); border-color:#e17055; color:#fff; box-shadow:0 0 14px rgba(225,112,85,.5),0 4px 0 #8a3a2a; }
+
+    /* ── HUD ── */
+    .hud { display: flex; justify-content: center; gap: clamp(8px, 2.5vmin, 16px); width: 100%; }
+    .hud-box {
+      flex: 1; max-width: clamp(100px, 25vmin, 170px);
+      background: linear-gradient(135deg, rgba(0,100,200,.35), rgba(0,50,120,.5));
+      border: 2px solid rgba(0,212,255,.45); border-radius: 16px;
+      padding: var(--pad-hud); text-align: center; backdrop-filter: blur(10px);
+      box-shadow: 0 0 18px rgba(0,212,255,.12), inset 0 1px 0 rgba(255,255,255,.1);
+    }
+    .hud-label {
+      font-size: var(--fs-label); font-weight: 800;
+      color: var(--accent); text-transform: uppercase; letter-spacing: 2px; display: block;
+    }
+    .hud-value {
+      font-family: 'Boogaloo', cursive;
+      font-size: var(--fs-hud); color: var(--white);
+      line-height: 1.1; text-shadow: 0 0 10px rgba(0,212,255,.8);
+    }
+    #timer-value.urgent {
+      color: #ff6b6b; text-shadow: 0 0 10px rgba(255,80,80,.9);
+      animation: urgentPulse .45s ease-in-out infinite alternate;
+    }
+    @keyframes urgentPulse { from { transform:scale(1) } to { transform:scale(1.18) } }
+
+    /* ── TABLERO ──
+       Cada círculo = --circle-size × --circle-size
+       3 cols × --circle-size + 2 gaps = ancho total del grid */
+    .board {
+      display: grid;
+      grid-template-columns: repeat(3, var(--circle-size));
+      grid-template-rows: repeat(2, var(--circle-size));
+      gap: var(--gap-board);
+    }
+
+    /* ── AGUJERO ── */
+    .hole {
+      width: var(--circle-size); height: var(--circle-size);
+      border-radius: 50%;
+      background: radial-gradient(ellipse at 30% 30%, #0d2455 0%, var(--hole-dark) 65%);
+      border: 3px solid var(--hole-rim);
+      box-shadow: inset 0 8px 24px rgba(0,0,0,.8), inset 0 2px 6px rgba(0,0,0,.6), 0 4px 14px rgba(0,0,0,.5);
+      position: relative;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .hole:active { border-color: var(--gold); box-shadow: inset 0 8px 24px rgba(0,0,0,.8), 0 0 18px rgba(255,233,77,.5); }
+    .hole::before {
+      content: ''; position: absolute; inset: -1px; border-radius: 50%;
+      background: conic-gradient(from 120deg, transparent 0%, rgba(0,212,255,.3) 30%, transparent 60%);
+      pointer-events: none; animation: rimSpin 6s linear infinite;
+    }
+    @keyframes rimSpin { to { transform: rotate(360deg) } }
+
+    /* Recorte circular */
+    .hole-clip {
+      position: absolute; inset: 7%;
+      border-radius: 50%; overflow: hidden;
+      pointer-events: none;
+    }
+
+    /* Imagen animada */
+    .face-wrap {
+      position: absolute; inset: 0;
+      border-radius: 50%; overflow: hidden;
+      border: 2px solid rgba(0,212,255,.55);
+      box-shadow: 0 0 12px rgba(0,212,255,.4);
+      transform: translateY(105%); opacity: 0;
+      transition: transform .3s cubic-bezier(.34,1.56,.64,1), opacity .2s ease-out;
+    }
+    .hole.up .face-wrap { transform: translateY(0%); opacity: 1; }
+    .face-wrap img { width:100%; height:100%; object-fit:cover; display:block; }
+
+    .hole.smacked .face-wrap { animation: smackFlash .32s ease-out forwards; }
+    @keyframes smackFlash {
+      0%   { filter:brightness(4) saturate(0); transform:scale(1.2)  rotate(-8deg); }
+      40%  { filter:brightness(2) saturate(2); }
+      100% { filter:brightness(1) saturate(1); transform:scale(1) rotate(0); }
+    }
+
+    /* +1 flotante */
+    .plus1 {
+      position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+      font-family: 'Boogaloo', cursive; font-size: clamp(1.4rem, 4vmin, 2.2rem);
+      color: var(--gold); text-shadow: 0 0 8px rgba(255,200,0,.8);
+      animation: floatScore .75s ease-out forwards; pointer-events: none; z-index: 20;
+    }
+    @keyframes floatScore {
+      0%   { opacity:1; transform:translateX(-50%) translateY(0)    scale(.8); }
+      30%  { opacity:1; transform:translateX(-50%) translateY(-10px) scale(1.3); }
+      100% { opacity:0; transform:translateX(-50%) translateY(-50px) scale(1); }
+    }
+
+    /* ── BOTÓN JUGAR ── */
+    #start-btn {
+      font-family: 'Boogaloo', cursive;
+      font-size: var(--fs-btn); letter-spacing: 1px;
+      padding: var(--pad-btn); border: none; border-radius: 50px;
+      background: linear-gradient(135deg, #0099ff 0%, #00d4ff 100%);
+      color: #fff; text-shadow: 0 1px 3px rgba(0,0,0,.3);
+      box-shadow: 0 5px 0 #005a99, 0 8px 22px rgba(0,180,255,.4);
+      transition: transform .1s, box-shadow .1s;
+    }
+    #start-btn:active { transform: translateY(4px); box-shadow: 0 1px 0 #005a99; }
+
+    /* ── PANTALLA FINAL ── */
+    #end-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(4,15,40,.88); backdrop-filter: blur(10px);
+      z-index: 200; flex-direction: column; align-items: center; justify-content: center;
+      padding: 20px;
+    }
+    #end-overlay.show { display: flex; }
+    .end-card {
+      position: relative;
+      background: linear-gradient(145deg, rgba(10,40,100,.9), rgba(5,20,55,.95));
+      border: 2px solid rgba(0,212,255,.4); border-radius: 24px;
+      padding: clamp(20px,4vmin,36px) clamp(20px,5vmin,40px);
+      width: 100%; max-width: min(340px, 90vw);
+      box-shadow: 0 0 50px rgba(0,212,255,.2);
+      display: flex; flex-direction: column; align-items: center;
+      gap: clamp(8px, 2vmin, 14px);
+      animation: cardIn .5s cubic-bezier(.34,1.4,.64,1) both;
+    }
+    @keyframes cardIn {
+      from { transform:scale(.6) translateY(40px); opacity:0; }
+      to   { transform:scale(1)  translateY(0);    opacity:1; }
+    }
+    /* Botón X cerrar */
+    .btn-cerrar {
+      position: absolute; top: 10px; right: 12px;
+      width: clamp(28px,5vmin,36px); height: clamp(28px,5vmin,36px);
+      border-radius: 50%; border: 2px solid rgba(0,212,255,.4);
+      background: rgba(0,40,100,.6); color: rgba(255,255,255,.8);
+      font-size: clamp(0.8rem, 2.2vmin, 1rem); font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      transition: background .15s, border-color .15s;
+    }
+    .btn-cerrar:hover { background:rgba(200,50,50,.5); border-color:rgba(255,100,100,.7); color:#fff; }
+
+    #end-overlay h2 {
+      font-family: 'Boogaloo', cursive;
+      font-size: clamp(1.6rem, 5vmin, 2.6rem);
+      background: linear-gradient(135deg,#fff 30%,var(--accent) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      filter: drop-shadow(0 0 8px rgba(0,212,255,.5));
+    }
+    #end-msg { font-size: clamp(0.8rem, 2.2vmin, 1rem); color: var(--white); font-weight: 700; opacity: .9; text-align:center; }
+    .score-display {
+      background: radial-gradient(ellipse, rgba(0,130,220,.3), transparent 70%);
+      border: 2px solid rgba(0,212,255,.3); border-radius: 18px;
+      padding: clamp(6px,1.5vmin,12px) clamp(24px,5vmin,40px);
+    }
+    #final-score {
+      font-family: 'Boogaloo', cursive;
+      font-size: clamp(2.8rem, 10vmin, 5rem);
+      color: var(--gold); text-shadow: 0 0 20px rgba(255,200,0,.7); line-height: 1;
+    }
+    .score-label { font-size: clamp(0.55rem,1.5vmin,0.7rem); font-weight:800; color:var(--accent); text-transform:uppercase; letter-spacing:2px; }
+    #play-again-btn {
+      font-family: 'Boogaloo', cursive;
+      font-size: clamp(1rem, 3vmin, 1.4rem);
+      padding: clamp(8px,2vmin,14px) clamp(28px,6vmin,48px);
+      border: none; border-radius: 50px;
+      background: linear-gradient(135deg, #0088cc, #00c6ff); color: #fff;
+      box-shadow: 0 5px 0 #005580, 0 8px 22px rgba(0,180,255,.35);
+      transition: transform .1s, box-shadow .1s;
+    }
+    #play-again-btn:active { transform:translateY(4px); box-shadow:0 1px 0 #005580; }
+
+    /* Insignia de nivel */
+    .nivel-badge { font-family:'Boogaloo',cursive; font-size:clamp(.75rem,2vmin,.95rem); padding:3px 14px; border-radius:50px; }
+    .nivel-badge.n1 { background:rgba(0,206,201,.2); color:#00cec9; border:1px solid #00cec9; }
+    .nivel-badge.n2 { background:rgba(0,212,255,.2); color:var(--accent); border:1px solid var(--accent); }
+    .nivel-badge.n3 { background:rgba(225,112,85,.2); color:#e17055; border:1px solid #e17055; }
+
+    /* ── MEDIA QUERIES ── */
+
+    /* Teléfonos muy pequeños (< 360px ancho o < 640px alto) */
+    @media (max-height: 640px) {
+      :root {
+        --circle-size: min(18vmin, 110px);
+        --fs-title: clamp(1.1rem, 4.5vmin, 1.8rem);
+      }
+      .game-wrapper { justify-content: space-between; padding: 4px 8px; }
+    }
+
+    /* Tablets en portrait (600px–900px) */
+    @media (min-width: 600px) and (max-width: 900px) {
+      :root { --circle-size: min(20vmin, 130px); }
+    }
+
+    /* Tablets / desktop landscape */
+    @media (min-width: 900px) {
+      :root {
+        --circle-size: min(18vmin, 160px);
+        --fs-title: clamp(1.8rem, 3.5vmin, 3rem);
+      }
+      .game-wrapper { max-width: 700px; margin: 0 auto; }
+    }
+
+    /* Desktop grande */
+    @media (min-width: 1400px) {
+      :root { --circle-size: min(16vmin, 180px); }
+    }
+
+  </style>
+</head>
+<body>
+
+  <div id="vol-control">
+    <span id="vol-icon">🔊</span>
+    <input type="range" id="vol-slider" min="0" max="100" value="70" title="Volumen">
+  </div>
+
+  <div class="game-wrapper">
+    <header>
+      <h1><span class="emoji">🎯 </span>¡Atrapa a Alex!<span class="emoji"> 🎯</span></h1>
+    </header>
+
+    <div class="nivel-selector">
+      <button class="btn-nivel activo" data-nivel="1">🐢 Fácil<small>NIVEL 1</small></button>
+      <button class="btn-nivel" data-nivel="2">⚡ Normal<small>NIVEL 2</small></button>
+      <button class="btn-nivel" data-nivel="3">🔥 Difícil<small>NIVEL 3</small></button>
+    </div>
+
+    <div class="hud">
+      <div class="hud-box">
+        <span class="hud-label">Puntos</span>
+        <span class="hud-value" id="score-value">0</span>
+      </div>
+      <div class="hud-box">
+        <span class="hud-label">Tiempo</span>
+        <span class="hud-value" id="timer-value">30</span>
+      </div>
+    </div>
+
+    <div class="board" id="board">
+      <div class="hole" id="hole-0"><div class="hole-clip"><div class="face-wrap"><img src="" alt="Alex"/></div></div></div>
+      <div class="hole" id="hole-1"><div class="hole-clip"><div class="face-wrap"><img src="" alt="Alex"/></div></div></div>
+      <div class="hole" id="hole-2"><div class="hole-clip"><div class="face-wrap"><img src="" alt="Alex"/></div></div></div>
+      <div class="hole" id="hole-3"><div class="hole-clip"><div class="face-wrap"><img src="" alt="Alex"/></div></div></div>
+      <div class="hole" id="hole-4"><div class="hole-clip"><div class="face-wrap"><img src="" alt="Alex"/></div></div></div>
+      <div class="hole" id="hole-5"><div class="hole-clip"><div class="face-wrap"><img src="" alt="Alex"/></div></div></div>
+    </div>
+
+    <button id="start-btn">¡Jugar! 🚀</button>
+  </div>
+
+  <div id="end-overlay">
+    <div class="end-card">
+      <button class="btn-cerrar" id="btn-cerrar" title="Volver al inicio">✕</button>
+      <h2>⏰ ¡Tiempo!</h2>
+      <span class="nivel-badge" id="nivel-badge"></span>
+      <p id="end-msg"></p>
+      <div class="score-display">
+        <div class="score-label">Tu puntuación</div>
+        <div id="final-score">0</div>
+      </div>
+      <button id="play-again-btn">¡Otra vez! 🔄</button>
+    </div>
+  </div>
+
+  <script>
+
+    // ─────────────────────────────────────────────
+    // FOTO DE ALEX (base64 incrustada — funciona sin
+    // servidor ni conexión a internet)
+    // ─────────────────────────────────────────────
+    const ALEX_SRC = "data:image/jpeg;base64,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";
+
+    // Asignamos la foto de Alex a todos los elementos <img> del tablero
+    document.querySelectorAll('.hole .face-wrap img').forEach(img => img.src = ALEX_SRC);
+
+
+    // ─────────────────────────────────────────────
+    // CONFIGURACIÓN DE NIVELES DE DIFICULTAD
+    //
+    // Cada nivel tiene dos parámetros de tiempo (ms):
+    //  • tiempoVisMin/Max → cuánto tiempo permanece
+    //    visible la carita (rango aleatorio).
+    //  • pausaMin/Max     → pausa entre apariciones.
+    //
+    // A mayor nivel: menos tiempo visible + menos pausa
+    // = apariciones más rápidas y difíciles de atrapar.
+    // ─────────────────────────────────────────────
+    const NIVELES = {
+      1: {
+        // NIVEL 1 — Fácil: ideal para niños de 3-5 años.
+        // La carita aparece lentamente y se queda 2-3 segundos.
+        nombre:        '🐢 Fácil',
+        claseInsignia: 'n1',
+        tiempoVisMin:  1800,  // mínimo 1.8 s visible
+        tiempoVisMax:  2800,  // máximo 2.8 s visible
+        pausaMin:       700,  // pausa mínima entre apariciones
+        pausaMax:      1100,  // pausa máxima entre apariciones
+      },
+      2: {
+        // NIVEL 2 — Normal: dificultad media para niños mayores o adultos.
+        nombre:        '⚡ Normal',
+        claseInsignia: 'n2',
+        tiempoVisMin:   900,
+        tiempoVisMax:  1500,
+        pausaMin:       350,
+        pausaMax:       650,
+      },
+      3: {
+        // NIVEL 3 — Difícil: apariciones muy rápidas.
+        // Requiere buenos reflejos.
+        nombre:        '🔥 Difícil',
+        claseInsignia: 'n3',
+        tiempoVisMin:   400,
+        tiempoVisMax:   750,
+        pausaMin:       130,
+        pausaMax:       320,
+      },
+    };
+
+    // Nivel activo al arrancar (se cambia con los botones)
+    let nivelActual = 1;
+
+
+    // ─────────────────────────────────────────────
+    // VARIABLES DE ESTADO DE LA PARTIDA
+    // ─────────────────────────────────────────────
+    const DURACION_JUEGO = 30; // Segundos totales
+
+    let puntuacion            = 0;
+    let tiempoRestante        = DURACION_JUEGO;
+    let juegoActivo           = false;
+    let intervaloTemporizador = null; // ID del setInterval de la cuenta regresiva
+    let timeoutCarita         = null; // ID del setTimeout de la próxima carita
+    let ultimoAgujero         = null; // Evitamos repetir el mismo agujero dos veces
+
+
+    // ─────────────────────────────────────────────
+    // REFERENCIAS A ELEMENTOS DEL DOM
+    // ─────────────────────────────────────────────
+    const agujeros       = Array.from(document.querySelectorAll('.hole'));
+    const elPuntuacion   = document.getElementById('score-value');
+    const elTiempo       = document.getElementById('timer-value');
+    const botonIniciar   = document.getElementById('start-btn');
+    const pantallaFinal  = document.getElementById('end-overlay');
+    const elPuntajeFinal = document.getElementById('final-score');
+    const elMensajeFinal = document.getElementById('end-msg');
+    const elNivelBadge   = document.getElementById('nivel-badge');
+    const botonOtraVez   = document.getElementById('play-again-btn');
+    const botonesNivel   = document.querySelectorAll('.btn-nivel');
+
+
+    // ─────────────────────────────────────────────
+    // SELECTOR DE NIVEL
+    // Al pulsar un botón de nivel: desactiva el anterior,
+    // activa el nuevo y guarda la elección en nivelActual.
+    // Los botones se bloquean mientras hay partida en curso.
+    // ─────────────────────────────────────────────
+    botonesNivel.forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (juegoActivo) return; // No se puede cambiar durante la partida
+        botonesNivel.forEach(b => b.classList.remove('activo'));
+        btn.classList.add('activo');
+        nivelActual = parseInt(btn.dataset.nivel);
+      });
+    });
+
+
+    // ─────────────────────────────────────────────
+    // FUNCIÓN: elegirAgujeroAleatorio()
+    // Devuelve un agujero al azar distinto al anterior,
+    // para que las apariciones sean más impredecibles.
+    // ─────────────────────────────────────────────
+    function elegirAgujeroAleatorio() {
+      let candidato;
+      do {
+        candidato = agujeros[Math.floor(Math.random() * agujeros.length)];
+      } while (candidato === ultimoAgujero); // Descarta el mismo de antes
+      ultimoAgujero = candidato;
+      return candidato;
+    }
+
+
+    // ─────────────────────────────────────────────
+    // FUNCIÓN: mostrarCarita()
+    // 1. Elige un agujero aleatorio.
+    // 2. Añade clase "up" → CSS sube la imagen del agujero.
+    // 3. Después del tiempo visible (según nivel), la baja
+    //    y programa la siguiente aparición.
+    // ─────────────────────────────────────────────
+    function mostrarCarita() {
+      if (!juegoActivo) return; // Salimos si el juego terminó
+
+      const cfg     = NIVELES[nivelActual];
+      const agujero = elegirAgujeroAleatorio();
+
+      agujero.classList.add('up'); // La transición CSS sube la imagen
+
+      // Tiempo aleatorio dentro del rango del nivel actual
+      const tiempoVisible = cfg.tiempoVisMin + Math.random() * (cfg.tiempoVisMax - cfg.tiempoVisMin);
+
+      timeoutCarita = setTimeout(() => {
+        agujero.classList.remove('up'); // Bajamos la imagen
+
+        // Pausa aleatoria antes de la siguiente aparición
+        const pausa = cfg.pausaMin + Math.random() * (cfg.pausaMax - cfg.pausaMin);
+        setTimeout(mostrarCarita, pausa);
+      }, tiempoVisible);
+    }
+
+
+    // ─────────────────────────────────────────────
+    // FUNCIÓN: registrarClic(agujero)
+    // Valida si la carita estaba visible y suma 1 punto.
+    // También lanza la animación de golpe y el +1 flotante.
+    // ─────────────────────────────────────────────
+    function registrarClic(agujero) {
+      // Solo contamos si: la carita está visible Y el juego está activo
+      if (!agujero.classList.contains('up') || !juegoActivo) return;
+
+      // ── Sumar punto y actualizar marcador ──
+      puntuacion++;
+      elPuntuacion.textContent = puntuacion;
+
+      // Cancelamos el timeout para que no desaparezca sola
+      clearTimeout(timeoutCarita);
+
+      // Bajamos la imagen y activamos efecto visual de golpe
+      agujero.classList.remove('up');
+      agujero.classList.add('smacked');
+      setTimeout(() => agujero.classList.remove('smacked'), 350);
+
+      // Creamos el texto "+1" que flota hacia arriba y desaparece
+      const flotante = document.createElement('span');
+      flotante.className   = 'plus1';
+      flotante.textContent = '+1';
+      agujero.appendChild(flotante);
+      setTimeout(() => flotante.remove(), 750); // Se elimina al terminar su animación
+
+      // Programamos la siguiente carita con una pausa corta
+      const cfg = NIVELES[nivelActual];
+      setTimeout(mostrarCarita, cfg.pausaMin);
+    }
+
+
+    // ─────────────────────────────────────────────
+    // FUNCIÓN: mensajeFinal(pts, nivel)
+    // Retorna un mensaje divertido adaptado al nivel
+    // y a la cantidad de puntos obtenidos.
+    // ─────────────────────────────────────────────
+    function mensajeFinal(pts, nivel) {
+      if (nivel === 1) {
+        if (pts === 0)  return '😴 Casi… ¡la próxima Alex no escapa!';
+        if (pts <= 3)   return '🌟 ¡Muy bien! ¡Eres un campeón!';
+        if (pts <= 7)   return '🥳 ¡Wow! ¡Qué rápido eres!';
+        return              '🏆 ¡INCREÍBLE! ¡Alex no puede contigo!';
+      }
+      if (nivel === 2) {
+        if (pts === 0)  return '😅 ¡Alex fue más rápido esta vez!';
+        if (pts <= 5)   return '👀 ¡Vas agarrando el ritmo!';
+        if (pts <= 12)  return '⚡ ¡Reflejos de ninja! Alex suda frío.';
+        return              '🔥 ¡Imparable! Alex pide tiempo fuera.';
+      }
+      // Nivel 3 — Difícil
+      if (pts === 0)  return '😱 ¡Alex fue invisible! Eso fue cruel…';
+      if (pts <= 4)   return '💀 Muy difícil, ¿verdad? ¡No te rindas!';
+      if (pts <= 10)  return '🎯 ¡Buen ojo! Alex empieza a asustarse.';
+      if (pts <= 18)  return '🚀 ¡Leyenda! Alex ya pide protección.';
+      return              '👑 ¡MÁXIMO NIVEL! Alex ha abandonado el país.';
+    }
+
+
+    // ─────────────────────────────────────────────
+    // FUNCIÓN: iniciarJuego()
+    // Reinicia todas las variables y arranca la partida:
+    //  1. Resetea puntuación y tiempo.
+    //  2. Oculta botón y pantalla de resultado.
+    //  3. Inicia la cuenta regresiva con setInterval.
+    //  4. Programa la primera aparición de Alex.
+    // ─────────────────────────────────────────────
+    function iniciarJuego() {
+      // Reseteamos estado
+      puntuacion       = 0;
+      tiempoRestante   = DURACION_JUEGO;
+      elPuntuacion.textContent = 0;
+      elTiempo.textContent     = DURACION_JUEGO;
+      elTiempo.classList.remove('urgent');
+      juegoActivo = true;
+
+      // Ocultamos UI que no se usa durante la partida
+      botonIniciar.style.display = 'none';
+      pantallaFinal.classList.remove('show');
+
+      // Limpiamos estados visuales de partidas anteriores
+      agujeros.forEach(a => a.classList.remove('up', 'smacked'));
+
+      // Cancelamos timers previos (importante al reiniciar)
+      clearInterval(intervaloTemporizador);
+      clearTimeout(timeoutCarita);
+
+      // ── Cuenta regresiva (se ejecuta cada 1 segundo) ──
+      intervaloTemporizador = setInterval(() => {
+        tiempoRestante--;
+        elTiempo.textContent = tiempoRestante;
+
+        // Efecto visual de urgencia cuando quedan 5 segundos o menos
+        if (tiempoRestante <= 5) elTiempo.classList.add('urgent');
+
+        // Cuando llega a 0, terminamos la partida
+        if (tiempoRestante <= 0) terminarJuego();
+      }, 1000);
+
+      // Pequeño retardo antes de la primera aparición
+      // para que el jugador se prepare (800 ms)
+      setTimeout(mostrarCarita, 800);
+    }
+
+
+    // ─────────────────────────────────────────────
+    // FUNCIÓN: terminarJuego()
+    // Para los timers, baja todas las caritas y muestra
+    // la tarjeta de resultado con puntuación y mensaje.
+    // ─────────────────────────────────────────────
+    function terminarJuego() {
+      juegoActivo = false;
+
+      clearInterval(intervaloTemporizador); // Detenemos cuenta regresiva
+      clearTimeout(timeoutCarita);          // Cancelamos la próxima aparición
+
+      // Bajamos cualquier carita que siga visible
+      agujeros.forEach(a => a.classList.remove('up'));
+
+      // Rellenamos la tarjeta de resultado
+      const cfg = NIVELES[nivelActual];
+      elPuntajeFinal.textContent = puntuacion;
+      elMensajeFinal.textContent = mensajeFinal(puntuacion, nivelActual);
+
+      // Insignia con el nombre y color del nivel jugado
+      elNivelBadge.textContent = cfg.nombre;
+      elNivelBadge.className   = 'nivel-badge ' + cfg.claseInsignia;
+
+      pantallaFinal.classList.add('show'); // Mostramos la pantalla final
+    }
+
+
+    // ─────────────────────────────────────────────
+    // EVENTOS
+    // ─────────────────────────────────────────────
+
+    // Cada agujero responde a clic (ratón/escritorio)
+    // y touchstart (pantalla táctil/móvil)
+    agujeros.forEach(agujero => {
+      agujero.addEventListener('click', () => registrarClic(agujero));
+
+      // preventDefault elimina el retraso de 300ms en móviles
+      agujero.addEventListener('touchstart', e => {
+        e.preventDefault();
+        registrarClic(agujero);
+      }, { passive: false });
+    });
+
+    botonIniciar.addEventListener('click',  iniciarJuego); // Botón principal
+    botonOtraVez.addEventListener('click',  iniciarJuego); // Botón de reinicio
+
+    // ── BOTÓN X: cierra overlay y regresa a pantalla inicial ──
+    document.getElementById('btn-cerrar').addEventListener('click', () => {
+      pantallaFinal.classList.remove('show');   // Oculta el overlay
+      botonIniciar.style.display = '';          // Muestra el botón ¡Jugar!
+      // Restaurar estado visual
+      elPuntuacion.textContent = 0;
+      elTiempo.textContent     = DURACION_JUEGO;
+      elTiempo.classList.remove('urgent');
+      agujeros.forEach(a => a.classList.remove('up', 'smacked'));
+    });
+
+
+    // ═══════════════════════════════════════════════════════════
+    // SISTEMA DE AUDIO  —  Web Audio API puro (sin archivos)
+    // ═══════════════════════════════════════════════════════════
+
+    let audioCtx       = null;
+    let gananciaMusica = null;   // volumen de la melodía
+    let gananciaEfectos= null;   // volumen de los efectos
+    let musicLoop      = null;   // ID del setTimeout del loop
+    let silenciado     = false;
+
+    // ── Inicializar AudioContext al primer gesto del usuario ──────
+    function iniciarAudio() {
+      if (audioCtx) return;
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+      gananciaMusica = audioCtx.createGain();
+      gananciaMusica.gain.value = 0.20;
+      gananciaMusica.connect(audioCtx.destination);
+
+      gananciaEfectos = audioCtx.createGain();
+      gananciaEfectos.gain.value = 0.55;
+      gananciaEfectos.connect(audioCtx.destination);
+    }
+
+    // ── Nota genérica ─────────────────────────────────────────────
+    // hz: frecuencia | tipo: forma de onda | vol: volumen 0-1
+    // t: tiempo de inicio | dur: duración en segundos | dest: destino
+    function nota(hz, tipo, vol, t, dur, dest) {
+      if (!audioCtx || silenciado) return;
+      const osc = audioCtx.createOscillator();
+      const g   = audioCtx.createGain();
+      osc.type = tipo;
+      osc.frequency.setValueAtTime(hz, t);
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(vol, t + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      osc.connect(g);
+      g.connect(dest || gananciaMusica);
+      osc.start(t);
+      osc.stop(t + dur + 0.02);
+    }
+
+    // ── Bombo sintetizado ─────────────────────────────────────────
+    function bombo(t) {
+      if (!audioCtx || silenciado) return;
+      const osc = audioCtx.createOscillator();
+      const g   = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(150, t);
+      osc.frequency.exponentialRampToValueAtTime(40, t + 0.08);
+      g.gain.setValueAtTime(0.6, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+      osc.connect(g); g.connect(gananciaMusica);
+      osc.start(t); osc.stop(t + 0.15);
+    }
+
+    // ── Caja/platillo con ruido blanco ────────────────────────────
+    function caja(t, vol) {
+      if (!audioCtx || silenciado) return;
+      const frames = Math.floor(audioCtx.sampleRate * 0.09);
+      const buf  = audioCtx.createBuffer(1, frames, audioCtx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < frames; i++) data[i] = (Math.random() * 2 - 1);
+      const src = audioCtx.createBufferSource();
+      const fil = audioCtx.createBiquadFilter();
+      const g   = audioCtx.createGain();
+      src.buffer = buf;
+      fil.type = 'highpass'; fil.frequency.value = 3500;
+      g.gain.setValueAtTime(vol || 0.25, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.09);
+      src.connect(fil); fil.connect(g); g.connect(gananciaMusica);
+      src.start(t); src.stop(t + 0.1);
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // MÚSICA DE CIRCO  —  "Entrada de los Gladiadores" (Fucík)
+    // Melodía clásica de circo, 190 BPM, 3 capas:
+    //   1. Trompeta (square + triangle)
+    //   2. Bajo tuba (sawtooth grave, oom-pah)
+    //   3. Percusión (bombo + caja)
+    // ══════════════════════════════════════════════════════════════
+    function tocarMusicaDeFondo() {
+      if (!audioCtx || silenciado || !juegoActivo) return;
+
+      const BPM = 190;
+      const b   = 60 / BPM;   // 1 beat
+      const e   = b / 2;      // corchea
+      const s   = b / 4;      // semicorchea
+      const t0  = audioCtx.currentTime + 0.04;
+
+      // ── 1. MELODÍA DE TROMPETA ─────────────────────────────────
+      // Tonada "Entrada de los Gladiadores" simplificada en Do Mayor
+      // [offset_beats, hz, dur_beats, vol]
+      const frases = [
+        // ── Frase A (8 beats) ──
+        [0,   523, 0.5, 0.22],  // Do5
+        [0.5, 659, 0.5, 0.22],  // Mi5
+        [1,   784, 0.5, 0.24],  // Sol5
+        [1.5, 880, 1.0, 0.26],  // La5 ♩
+        [2.5, 784, 0.5, 0.22],  // Sol5
+        [3,   698, 0.5, 0.20],  // Fa5
+        [3.5, 659, 1.0, 0.22],  // Mi5 ♩
+        [4.5, 523, 0.5, 0.18],  // Do5
+        [5,   587, 0.5, 0.18],  // Re5
+        [5.5, 659, 0.5, 0.20],  // Mi5
+        [6,   698, 0.5, 0.20],  // Fa5
+        [6.5, 784, 0.5, 0.22],  // Sol5
+        [7,   659, 0.5, 0.20],  // Mi5
+        [7.5, 523, 0.5, 0.18],  // Do5
+        // ── Frase B saltarina (8 beats) ──
+        [8,    784, s/b, 0.22], [8+s/b, 880, s/b, 0.22],
+        [8.5,  784, 0.5, 0.20],
+        [9,    659, s/b, 0.18], [9+s/b, 698, s/b, 0.18],
+        [9.5,  659, 0.5, 0.20],
+        [10,   523, 0.5, 0.18],
+        [10.5, 494, 0.5, 0.16],
+        [11,   523, 0.5, 0.18],
+        [11.5, 440, 0.5, 0.16],
+        [12,   392, 0.5, 0.16],
+        [12.5, 440, 0.5, 0.16],
+        [13,   494, 0.5, 0.18],
+        [13.5, 523, 1.0, 0.22],  // Do5 ♩ cierre frase B
+        // ── Frase C subida (4 beats) ──
+        [15,   392, 0.5, 0.18],
+        [15.5, 440, 0.5, 0.20],
+        [16,   494, 0.5, 0.22],
+        [16.5, 523, 0.5, 0.24],
+        [17,   587, 0.5, 0.24],
+        [17.5, 659, 0.5, 0.26],
+        [18,   698, 0.5, 0.26],
+        [18.5, 784, 0.5, 0.28],
+        // ── Remate final (4 beats) ──
+        [19,   880, 0.5, 0.30],
+        [19.5, 784, 0.5, 0.26],
+        [20,   698, 0.5, 0.24],
+        [20.5, 659, 0.5, 0.22],
+        [21,   784, 1.0, 0.28],
+        [22,   523, 0.5, 0.20],
+        [22.5, 392, 0.5, 0.18],
+        [23,   523, 1.0, 0.22],  // final — loop vuelve aquí
+      ];
+
+      const totalBeats = 24;
+      const durTotal   = totalBeats * b;
+
+      frases.forEach(([off, hz, dur, vol]) => {
+        const t  = t0 + off * b;
+        const ds = dur * b;
+        nota(hz,       'square',   vol,      t, ds * 0.80, gananciaMusica);
+        nota(hz,       'triangle', vol*0.35, t, ds * 0.75, gananciaMusica);
+        nota(hz * 1.5, 'sine',     vol*0.07, t, ds * 0.45, gananciaMusica);
+      });
+
+      // ── 2. BAJO TUBA (oom-pah cada beat) ──────────────────────
+      // Patrón: nota raíz en beat impar, quinta en beat par
+      const bajoNotas = [131,165,131,165, 131,165,131,165,
+                         110,139,110,139, 131,165,131,165,
+                         131,165,131,165, 131,165,131,165];
+      for (let i = 0; i < totalBeats; i++) {
+        nota(bajoNotas[i] || 131, 'sawtooth', 0.18, t0 + i*b, b*0.55, gananciaMusica);
+      }
+
+      // ── 3. PERCUSIÓN (bombo + caja, estilo marcha de circo) ───
+      for (let i = 0; i < totalBeats; i++) {
+        const tc = t0 + i * b;
+        // Bombo en beats 1 y 3 de cada compás de 4/4
+        if (i % 4 === 0 || i % 4 === 2) bombo(tc);
+        // Caja en beats 2 y 4
+        if (i % 4 === 1 || i % 4 === 3) caja(tc, 0.28);
+        // Contratiempo de caja suave en semicorcheas (sabor circo)
+        caja(tc + e, 0.10);
+      }
+
+      // ── Loop: re-programar al terminar ────────────────────────
+      if (juegoActivo && !silenciado) {
+        musicLoop = setTimeout(tocarMusicaDeFondo, (durTotal - 0.12) * 1000);
+      }
+    }
+
+    // ── Efectos de sonido ─────────────────────────────────────────
+
+    // Acierto: dos notas ascendentes tipo campana
+    function sonidoClic() {
+      if (!audioCtx || silenciado) return;
+      const t = audioCtx.currentTime;
+      nota(880,  'sine', 0.5, t,        0.10, gananciaEfectos);
+      nota(1320, 'sine', 0.4, t + 0.08, 0.14, gananciaEfectos);
+    }
+
+    // Urgencia: pitido corto en los últimos 5 segundos
+    function sonidoUrgente() {
+      if (!audioCtx || silenciado) return;
+      nota(440, 'square', 0.3, audioCtx.currentTime, 0.07, gananciaEfectos);
+    }
+
+    // Fanfarria de fin estilo circo
+    function sonidoFin() {
+      if (!audioCtx || silenciado) return;
+      const t = audioCtx.currentTime;
+      [[523,0],[659,0.10],[784,0.20],[1047,0.32],[784,0.48],[1047,0.58]].forEach(([hz,off]) => {
+        nota(hz, 'sawtooth', 0.40, t+off, 0.12, gananciaEfectos);
+        nota(hz, 'triangle', 0.15, t+off, 0.15, gananciaEfectos);
+      });
+      [0, 0.18, 0.36, 0.54].forEach(off => caja(t + off, 0.45));
+    }
+
+    function detenerMusica() {
+      clearTimeout(musicLoop);
+      musicLoop = null;
+    }
+
+    // ── CONTROL DE VOLUMEN ──────────────────────────
+    const volSlider  = document.getElementById('vol-slider');
+    const volIcon    = document.getElementById('vol-icon');
+
+    function actualizarIconoVol(val) {
+      if (val === 0)      volIcon.textContent = '🔇';
+      else if (val < 35)  volIcon.textContent = '🔈';
+      else if (val < 70)  volIcon.textContent = '🔉';
+      else                volIcon.textContent = '🔊';
+    }
+
+    function aplicarVolumen(val) {
+      const v = val / 100;
+      silenciado = v === 0;
+      volSlider.style.setProperty('--val', val + '%');
+      actualizarIconoVol(val);
+      if (!audioCtx) return;
+      if (silenciado) {
+        audioCtx.suspend();
+      } else {
+        audioCtx.resume();
+        if (gananciaMusica)  gananciaMusica.gain.value  = v * 0.18;
+        if (gananciaEfectos) gananciaEfectos.gain.value = v * 0.6;
+        if (juegoActivo && !musicLoop) tocarMusicaDeFondo();
+      }
+    }
+
+    volSlider.addEventListener('input', () => {
+      aplicarVolumen(parseInt(volSlider.value));
+    });
+
+    volIcon.addEventListener('click', () => {
+      if (parseInt(volSlider.value) > 0) {
+        volSlider.dataset.prev = volSlider.value;
+        volSlider.value = 0;
+      } else {
+        volSlider.value = volSlider.dataset.prev || 70;
+      }
+      aplicarVolumen(parseInt(volSlider.value));
+    });
+
+    // ── Conectar audio al flujo del juego ─────────────────────────
+    const _iniciarOriginal  = iniciarJuego;
+    const _terminarOriginal = terminarJuego;
+
+    iniciarJuego = function() {
+      iniciarAudio();
+      detenerMusica();
+      _iniciarOriginal();
+      setTimeout(tocarMusicaDeFondo, 300);
+    };
+
+    terminarJuego = function() {
+      detenerMusica();
+      _terminarOriginal();
+      setTimeout(sonidoFin, 100);
+    };
+
+    const _clicOriginal = registrarClic;
+    registrarClic = function(agujero) {
+      const eraVisible = agujero.classList.contains('up');
+      _clicOriginal(agujero);
+      if (eraVisible && juegoActivo) sonidoClic();
+    };
+
+    // Pitido de urgencia en los últimos 5 segundos
+    const observadorTiempo = new MutationObserver(() => {
+      const val = parseInt(elTiempo.textContent);
+      if (val <= 5 && val > 0 && juegoActivo) sonidoUrgente();
+    });
+    observadorTiempo.observe(elTiempo, { childList: true, subtree: true });
+
+    botonIniciar.removeEventListener('click', _iniciarOriginal);
+    botonOtraVez.removeEventListener('click', _iniciarOriginal);
+    botonIniciar.addEventListener('click', iniciarJuego);
+    botonOtraVez.addEventListener('click', iniciarJuego);
+
+    // ── Cursor martillo ───────────────────────────────────────────
+    document.addEventListener('mousedown',  () => document.body.classList.add('golpeando'));
+    document.addEventListener('mouseup',    () => document.body.classList.remove('golpeando'));
+    document.addEventListener('touchstart', () => document.body.classList.add('golpeando'),    { passive: true });
+    document.addEventListener('touchend',   () => document.body.classList.remove('golpeando'), { passive: true });
+  
+
+    // ── REGISTRO DEL SERVICE WORKER (PWA offline) ──
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js')
+          .then(() => console.log('SW registrado ✓'))
+          .catch(e => console.log('SW error:', e));
+      });
+    }
+
+    // ── BANNER DE INSTALACIÓN EN ANDROID ──
+    let deferredPrompt = null;
+    window.addEventListener('beforeinstallprompt', e => {
+      e.preventDefault();
+      deferredPrompt = e;
+      // Mostramos botón de instalar si no está ya instalado
+      if (!window.matchMedia('(display-mode: fullscreen)').matches) {
+        const btnInstalar = document.createElement('button');
+        btnInstalar.id = 'btn-instalar';
+        btnInstalar.innerHTML = '📲 Instalar app';
+        btnInstalar.style.cssText = `
+          position:fixed; bottom:18px; left:50%; transform:translateX(-50%);
+          z-index:400; font-family:'Boogaloo',cursive; font-size:1rem;
+          padding:9px 24px; border:none; border-radius:50px;
+          background:linear-gradient(135deg,#00b894,#00cec9); color:#fff;
+          box-shadow:0 4px 0 #007a6e, 0 6px 18px rgba(0,206,201,.4);
+          white-space:nowrap;
+        `;
+        document.body.appendChild(btnInstalar);
+        btnInstalar.addEventListener('click', async () => {
+          deferredPrompt.prompt();
+          const { outcome } = await deferredPrompt.userChoice;
+          if (outcome === 'accepted') btnInstalar.remove();
+          deferredPrompt = null;
+        });
+      }
+    });
+  </script>
+</body>
+</html>
